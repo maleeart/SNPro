@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { TroubleshootingTab, type Case } from "@/components/troubleshooting-tab";
 import { DiscussionTab, type Comment, type Activity } from "@/components/discussion-tab";
 import { DocumentsTab, type Doc, type DocCategory } from "@/components/documents-tab";
+import { TimelineTab, type Task } from "@/components/timeline-tab";
 
 const STATUS_LABEL = {
   future: "Future Pipeline", in_progress: "In-Progress", completed: "Completed",
@@ -19,22 +20,22 @@ export default async function ProjectDeepDive({ params }: { params: Promise<{ id
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [{ data: project }, { data: profile }, { data: cases }, { data: comments }, { data: activity }, { data: docRows }] =
+  const [{ data: project }, { data: profile }, { data: cases }, { data: comments },
+    { data: activity }, { data: docRows }, { data: taskRows }, { data: members }] =
     await Promise.all([
       supabase.from("projects").select("*").eq("id", id).single(),
       supabase.from("profiles").select("role").eq("id", user!.id).single(),
       supabase.from("troubleshooting_cases").select("*").eq("project_id", id).order("created_at", { ascending: false }),
       supabase.from("comments").select("id,body,created_at,author:profiles(full_name)").eq("project_id", id).order("created_at", { ascending: false }),
       supabase.from("activity_log").select("id,action,created_at,actor:profiles(full_name)").eq("project_id", id).order("created_at", { ascending: false }).limit(50),
-      supabase.from("documents")
-        .select("id,title,category,document_versions(version,storage_path,file_type,uploaded_at)")
-        .eq("project_id", id).order("created_at", { ascending: false }),
+      supabase.from("documents").select("id,title,category,document_versions(version,storage_path,file_type,uploaded_at)").eq("project_id", id).order("created_at", { ascending: false }),
+      supabase.from("tasks").select("id,name,start_date,end_date,progress,assignee:profiles(full_name)").eq("project_id", id).order("sort_order").order("created_at"),
+      supabase.from("profiles").select("id,full_name"),
     ]);
 
   if (!project) notFound();
   const canEdit = profile?.role === "admin" || profile?.role === "engineer";
 
-  // sign every version path (private bucket → time-limited URLs)
   const docs: Doc[] = await Promise.all(
     (docRows ?? []).map(async (d) => {
       const versions = [...(d.document_versions ?? [])].sort((a, b) => b.version - a.version);
@@ -48,6 +49,11 @@ export default async function ProjectDeepDive({ params }: { params: Promise<{ id
     }),
   );
 
+  const tasks: Task[] = (taskRows ?? []).map((t) => ({
+    id: t.id, name: t.name, start_date: t.start_date, end_date: t.end_date,
+    progress: t.progress, assignee: nameOf(t.assignee as Named),
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -59,7 +65,7 @@ export default async function ProjectDeepDive({ params }: { params: Promise<{ id
         {project.contract_no && <p className="text-sm text-muted-foreground">เลขสัญญา: {project.contract_no}</p>}
       </div>
 
-      <Tabs defaultValue="troubleshooting">
+      <Tabs defaultValue="timeline">
         <TabsList>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -67,7 +73,7 @@ export default async function ProjectDeepDive({ params }: { params: Promise<{ id
           <TabsTrigger value="discussion">Discussion</TabsTrigger>
         </TabsList>
         <TabsContent value="timeline">
-          <div className="py-10 text-center text-muted-foreground">Gantt Chart + Task Dependency — coming soon</div>
+          <TimelineTab projectId={id} tasks={tasks} members={members ?? []} canEdit={canEdit} />
         </TabsContent>
         <TabsContent value="documents">
           <DocumentsTab projectId={id} canUpload={canEdit} docs={docs} />
@@ -77,8 +83,7 @@ export default async function ProjectDeepDive({ params }: { params: Promise<{ id
         </TabsContent>
         <TabsContent value="discussion">
           <DiscussionTab
-            projectId={id}
-            canPost={canEdit}
+            projectId={id} canPost={canEdit}
             comments={(comments ?? []).map((c) => ({ id: c.id, body: c.body, created_at: c.created_at, author: nameOf(c.author as Named) })) as Comment[]}
             activity={(activity ?? []).map((a) => ({ id: a.id, action: a.action, created_at: a.created_at, actor: nameOf(a.actor as Named) })) as Activity[]}
           />
