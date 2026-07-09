@@ -29,6 +29,54 @@ export async function addCase(projectId: string, formData: FormData) {
   revalidatePath(`/projects/${projectId}`);
 }
 
+const BUCKET = "documents";
+
+// Upload a file. If a document with the same title+category exists, this adds a NEW version;
+// otherwise it creates the document at version 1. (Version Control)
+export async function uploadDocument(projectId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) throw new Error("ไม่พบไฟล์");
+  const category = String(formData.get("category"));
+  const title = String(formData.get("title")) || file.name;
+
+  // find or create the document
+  const { data: existing } = await supabase
+    .from("documents").select("id").eq("project_id", projectId)
+    .eq("category", category).eq("title", title).maybeSingle();
+
+  let documentId = existing?.id;
+  if (!documentId) {
+    const { data, error } = await supabase.from("documents")
+      .insert({ project_id: projectId, category, title, created_by: user?.id })
+      .select("id").single();
+    if (error) throw new Error(error.message);
+    documentId = data.id;
+  }
+
+  // next version number
+  const { data: last } = await supabase.from("document_versions")
+    .select("version").eq("document_id", documentId)
+    .order("version", { ascending: false }).limit(1).maybeSingle();
+  const version = (last?.version ?? 0) + 1;
+
+  const path = `${projectId}/${documentId}/v${version}-${file.name}`;
+  const { error: upErr } = await supabase.storage.from(BUCKET)
+    .upload(path, file, { contentType: file.type || undefined });
+  if (upErr) throw new Error(upErr.message);
+
+  const { error: verErr } = await supabase.from("document_versions").insert({
+    document_id: documentId, version, storage_path: path,
+    file_type: file.type, size_bytes: file.size, uploaded_by: user?.id,
+  });
+  if (verErr) throw new Error(verErr.message);
+
+  await log(projectId, version === 1 ? "อัปโหลดเอกสาร" : `อัปโหลดเวอร์ชัน v${version}`, "documents", documentId);
+  revalidatePath(`/projects/${projectId}`);
+}
+
 export async function addComment(projectId: string, formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
