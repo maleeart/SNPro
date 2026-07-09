@@ -40,8 +40,9 @@ export function DocumentsTab({ projectId, docs, canUpload }: {
     setBusy(true); setError("");
     try {
       const supabase = createClient();
-      // unique path so same filename never collides
-      const path = `${projectId}/${Date.now()}-${file.name}`;
+      // sanitize: keep only ascii-safe chars, replace thai/spaces/special with _
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${projectId}/${Date.now()}-${safeName}`;
       const { error: upErr } = await supabase.storage.from("Document")
         .upload(path, file, { contentType: file.type || undefined });
       if (upErr) throw new Error(upErr.message);
