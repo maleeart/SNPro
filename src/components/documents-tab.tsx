@@ -42,7 +42,7 @@ export function DocumentsTab({ projectId, docs, canUpload }: {
       const supabase = createClient();
       // unique path so same filename never collides
       const path = `${projectId}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from("documents")
+      const { error: upErr } = await supabase.storage.from("Document")
         .upload(path, file, { contentType: file.type || undefined });
       if (upErr) throw new Error(upErr.message);
       // save metadata via server action

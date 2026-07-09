@@ -40,7 +40,7 @@ export default async function ProjectDeepDive({ params }: { params: Promise<{ id
       const versions = [...(d.document_versions ?? [])].sort((a, b) => b.version - a.version);
       const signed = await Promise.all(
         versions.map(async (v) => {
-          const { data } = await supabase.storage.from("documents").createSignedUrl(v.storage_path, 3600);
+          const { data } = await supabase.storage.from("Document").createSignedUrl(v.storage_path, 3600);
           return { version: v.version, url: data?.signedUrl ?? "#", file_type: v.file_type, uploaded_at: v.uploaded_at };
         }),
       );
