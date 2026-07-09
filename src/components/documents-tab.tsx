@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { uploadDocument } from "@/app/(dashboard)/projects/[id]/actions";
+import { createClient } from "@/lib/supabase/client";
+import { saveDocumentVersion } from "@/app/(dashboard)/projects/[id]/actions";
 
 export type DocCategory = "contract" | "engineering" | "report";
 export type DocVersion = { version: number; url: string; file_type: string | null; uploaded_at: string };
@@ -16,7 +17,6 @@ const CATEGORIES: { key: DocCategory; label: string }[] = [
   { key: "report",      label: "📂 รายงานและการตรวจรับ" },
 ];
 
-// ponytail: filename keyword guess — a hint only, user always overrides. Extend keywords as needed.
 function guessCategory(name: string): DocCategory {
   const n = name.toLowerCase();
   if (/(tor|สัญญา|contract|quotation|ใบเสนอราคา|ราคากลาง|po|จัดซื้อ)/.test(n)) return "contract";
@@ -30,21 +30,42 @@ export function DocumentsTab({ projectId, docs, canUpload }: {
   const [category, setCategory] = useState<DocCategory>("report");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleUpload(e: React.FormEvent) {
+    e.preventDefault();
+    const file = fileRef.current?.files?.[0];
+    if (!file) return;
+    setBusy(true); setError("");
+    try {
+      const supabase = createClient();
+      // unique path so same filename never collides
+      const path = `${projectId}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase.storage.from("documents")
+        .upload(path, file, { contentType: file.type || undefined });
+      if (upErr) throw new Error(upErr.message);
+      // save metadata via server action
+      await saveDocumentVersion({
+        projectId, category, title: title || file.name,
+        storagePath: path, fileType: file.type, sizeBytes: file.size,
+      });
+      setTitle("");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
       {canUpload && (
-        <form
-          action={async (fd) => {
-            setBusy(true);
-            try { await uploadDocument(projectId, fd); setTitle(""); }
-            finally { setBusy(false); }
-          }}
-          className="rounded-xl border p-4 space-y-3"
-        >
+        <form onSubmit={handleUpload} className="rounded-xl border p-4 space-y-3">
           <p className="font-semibold text-sm">อัปโหลดเอกสาร</p>
           <input
-            type="file" name="file" required
+            ref={fileRef} type="file" name="file" required
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) { setCategory(guessCategory(f.name)); if (!title) setTitle(f.name); }
@@ -52,14 +73,14 @@ export function DocumentsTab({ projectId, docs, canUpload }: {
             className="block text-sm"
           />
           <div className="grid gap-3 sm:grid-cols-2">
-            <select name="category" value={category}
-              onChange={(e) => setCategory(e.target.value as DocCategory)}
+            <select value={category} onChange={(e) => setCategory(e.target.value as DocCategory)}
               className="h-9 rounded-md border bg-transparent px-3 text-sm">
               {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
-            <Input name="title" value={title} onChange={(e) => setTitle(e.target.value)}
-              placeholder="ชื่อเอกสาร (อัปชื่อเดิม = เวอร์ชันใหม่)" />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="ชื่อเอกสาร (ชื่อเดิม = เวอร์ชันใหม่)" />
           </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
           <Button type="submit" disabled={busy}>{busy ? "กำลังอัปโหลด..." : "อัปโหลด"}</Button>
         </form>
       )}
@@ -68,7 +89,9 @@ export function DocumentsTab({ projectId, docs, canUpload }: {
         const items = docs.filter((d) => d.category === cat.key);
         return (
           <div key={cat.key} className="space-y-2">
-            <h3 className="font-semibold">{cat.label} <span className="text-muted-foreground text-sm">({items.length})</span></h3>
+            <h3 className="font-semibold">{cat.label}
+              <span className="text-muted-foreground text-sm ml-2">({items.length})</span>
+            </h3>
             {items.length === 0 && <p className="text-sm text-muted-foreground pl-6">— ว่าง —</p>}
             {items.map((d) => {
               const latest = d.versions[0];
