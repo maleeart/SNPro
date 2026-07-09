@@ -12,9 +12,15 @@ export async function createProject(formData: FormData) {
     name: String(formData.get("name")),
     contract_no: String(formData.get("contract_no")) || null,
     status: (String(formData.get("status")) || "future") as ProjectStatus,
+    client: String(formData.get("client")) || null,
+    location: String(formData.get("location")) || null,
+    budget: Number(formData.get("budget")) || null,
+    start_date: String(formData.get("start_date")) || null,
+    end_date: String(formData.get("end_date")) || null,
+    description: String(formData.get("description")) || null,
     created_by: user?.id,
   });
-  if (error) throw new Error(error.message); // RLS blocks non-admins here
+  if (error) throw new Error(error.message);
   revalidatePath("/projects");
 }
 

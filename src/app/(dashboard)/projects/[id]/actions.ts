@@ -14,13 +14,19 @@ async function log(projectId: string, action: string, entity: string, entityId?:
 export async function addCase(projectId: string, formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+
+  const beforeImages = JSON.parse(String(formData.get("before_images_json") ?? "[]"));
+  const afterImages = JSON.parse(String(formData.get("after_images_json") ?? "[]"));
+
   const { data, error } = await supabase.from("troubleshooting_cases").insert({
     project_id: projectId,
     title: String(formData.get("title")),
     problem_desc: String(formData.get("problem_desc")) || null,
     symptoms: String(formData.get("symptoms")) || null,
+    before_images: beforeImages,
     solution_desc: String(formData.get("solution_desc")) || null,
     parts_used: String(formData.get("parts_used")) || null,
+    after_images: afterImages,
     tags: String(formData.get("tags")).split(",").map((t) => t.trim()).filter(Boolean),
     created_by: user?.id,
   }).select("id").single();
@@ -29,8 +35,6 @@ export async function addCase(projectId: string, formData: FormData) {
   revalidatePath(`/projects/${projectId}`);
 }
 
-// Called after client-side upload to Supabase Storage — only handles metadata + versioning.
-// File bytes never pass through Next.js server (avoids 4MB body limit).
 export async function saveDocumentVersion(opts: {
   projectId: string; category: string; title: string;
   storagePath: string; fileType: string; sizeBytes: number;

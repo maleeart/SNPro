@@ -23,3 +23,24 @@ export async function updateProgress(taskId: string, projectId: string, progress
   if (error) throw new Error(error.message);
   revalidatePath(`/projects/${projectId}`);
 }
+
+export async function renameTask(taskId: string, projectId: string, name: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("tasks").update({ name }).eq("id", taskId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function reorderTasks(projectId: string, ids: string[]) {
+  const supabase = await createClient();
+  await Promise.all(ids.map((id, i) => supabase.from("tasks").update({ sort_order: i }).eq("id", id)));
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function addTaskPhotos(taskId: string, projectId: string, paths: string[]) {
+  const supabase = await createClient();
+  const { data } = await supabase.from("tasks").select("photos").eq("id", taskId).single();
+  const existing: string[] = data?.photos ?? [];
+  await supabase.from("tasks").update({ photos: [...existing, ...paths] }).eq("id", taskId);
+  revalidatePath(`/projects/${projectId}`);
+}

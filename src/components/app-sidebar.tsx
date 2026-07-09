@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, GanttChartSquare, KanbanSquare,
-  Wrench, FolderArchive, Users,
+  Wrench, FolderArchive, Users, Search,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -13,6 +13,7 @@ import {
 
 const nav = [
   { title: "Dashboard",          url: "/",                icon: LayoutDashboard },
+  { title: "ค้นหา",              url: "/search",          icon: Search },
   { title: "Master Timeline",    url: "/timeline",        icon: GanttChartSquare },
   { title: "All Projects",       url: "/projects",        icon: KanbanSquare },
   { title: "Troubleshooting",    url: "/troubleshooting", icon: Wrench },
