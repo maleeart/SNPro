@@ -29,12 +29,9 @@ create table projects (
   end_date    date,
   description text,
   created_by  uuid references profiles(id),
-  created_at  timestamptz default now(),
-  search_tsv  tsvector generated always as (
-                to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(contract_no,''))
-              ) stored
+  created_at  timestamptz default now()
 );
-create index projects_search_idx on projects using gin(search_tsv);
+-- ponytail: full-text search added later via trigger-maintained tsvector (Global Search step)
 
 create table project_members (
   project_id uuid references projects on delete cascade,
@@ -94,14 +91,8 @@ create table troubleshooting_cases (
   after_images  text[],
   tags          text[],
   created_by    uuid references profiles(id),
-  created_at    timestamptz default now(),
-  search_tsv    tsvector generated always as (
-                  to_tsvector('simple',
-                    coalesce(title,'')||' '||coalesce(problem_desc,'')||' '||
-                    coalesce(solution_desc,'')||' '||array_to_string(tags,' '))
-                ) stored
+  created_at    timestamptz default now()
 );
-create index cases_search_idx on troubleshooting_cases using gin(search_tsv);
 
 -- ── Tab 4: Comments + Activity Log ────────────
 create table comments (
